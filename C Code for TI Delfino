@@ -1,0 +1,305 @@
+#include "F28x_Project.h"     
+#define EPWM_TIMER_TBRPD 4999 //TPRPD = 100*106/(20*103) -1
+#define EPWM_TIMER_TBSTEP 500  //Step size of 500 for Task 2 Step 3
+
+ Uint16 Result = 0;    
+ Uint32 scale = 500;  
+ Uint16 duty_cycle1 = 1000;  //Declare a global variable for duty cycle of the pwm
+ 
+ int16 duty_red = 4999;  //Duty cycle for red
+ int16 duty_green = 0;  //Duty cycle for green
+ int16 duty_blue = 0;  //Duty cycle for blue
+ int16 sector = 0;  //Used to choose the sector of operation
+ int16 counter = 0; //Counter variable
+ Uint16 risingEdgeDelay = 50; //Variable for Dead-band rising edge
+// Declare the service routines and functions
+
+//##Beginning of the main code ###
+
+void InitEPwm1Example(void);//blue
+void InitEPwm2Example(void);//green
+void InitEPwm7Example(void);//red
+
+void main(void)
+{
+
+    InitSysCtrl();
+
+
+
+
+    DINT;
+
+    InitPieCtrl();
+
+
+    // Disable CPU interrupts and clear all CPU interrupt flags:
+    IER = 0x0000;
+    IFR = 0x0000;
+
+    InitPieVectTable();
+    EALLOW; 		//Enables access to protected register
+    // Configure GPIO0 as ePWM1A output
+    GpioCtrlRegs.GPAGMUX1.bit.GPIO0 = 0;
+    GpioCtrlRegs.GPAMUX1.bit.GPIO0 = 1;
+    GpioCtrlRegs.GPADIR.bit.GPIO0 = 1;  
+    // Configure GPIO2 as ePWM1A output
+    GpioCtrlRegs.GPAGMUX1.bit.GPIO2 = 0;
+    GpioCtrlRegs.GPAMUX1.bit.GPIO2 = 1;
+    GpioCtrlRegs.GPADIR.bit.GPIO2 = 1;
+    // Configure GPIO13 as ePWM1A output
+    GpioCtrlRegs.GPAGMUX1.bit.GPIO13 = 0;
+    GpioCtrlRegs.GPAMUX1.bit.GPIO13 = 1;
+    GpioCtrlRegs.GPADIR.bit.GPIO13 = 1;
+    EDIS;		           //Disables access to protected register
+
+    EALLOW;		//Enables access to protected register
+    CpuSysRegs.PCLKCR0.bit.TBCLKSYNC = 0; // Stop ePWM time-base clock for synchronized setup
+    EDIS;			 //Disables access to protected register
+
+    InitEPwm1Example(); 	// Initialize ePWM1 configuration
+    InitEPwm2Example();	// Initialize ePWM2 configuration
+
+
+
+    InitEPwm7Example();	// Initialize ePWM7 configuration
+
+
+    EALLOW;		//Enables access to protected register
+    CpuSysRegs.PCLKCR0.bit.TBCLKSYNC = 1; // Start ePWM time-base clock to synchronize all modules
+    EDIS;			 //Disables access to protected register
+
+
+     for(;;)			//Infinite For Loop
+     {
+         DELAY_US(200000);		//Delay of 2 seconds
+
+         if(sector == 0)
+{
+    duty_red = duty_red - EPWM_TIMER_TBSTEP;     // Gradually decrease red duty
+    duty_green = duty_green + EPWM_TIMER_TBSTEP; // Gradually increase green duty
+    duty_blue = 0;                               // Blue off in this sector
+}
+
+
+         if(sector==1)
+             {
+                duty_red = 0;                                // Red off in this sector
+      duty_green = duty_green - EPWM_TIMER_TBSTEP; // Gradually decrease green duty
+       duty_blue = duty_blue + EPWM_TIMER_TBSTEP;   // Gradually increase blue duty
+             }
+
+         if(sector==2)
+
+
+
+              {
+                 duty_red = duty_red + EPWM_TIMER_TBSTEP;     // Gradually    increase red duty
+   		 duty_green = 0;                              // Green off in this sector
+    		duty_blue = duty_blue - EPWM_TIMER_TBSTEP;   // Gradually decrease blue duty
+              }
+         EPwm1Regs.CMPA.bit.CMPA = duty_blue;	// Update PWM duty for blue LED
+         EPwm2Regs.CMPA.bit.CMPA = duty_green;	// Update PWM duty for green LED
+         EPwm7Regs.CMPB.bit.CMPB = duty_red;	// Update PWM duty for red LED
+
+        counter = counter + 1;                 // Increment transition counter
+
+if(counter == 10)                      // Check if it is time to change color sector
+{
+    sector = sector + 1;               // Move to next color sector
+    counter = 0;                       // Reset counter
+
+    if(sector >= 3)                    // Wrap around after last sector
+    {
+        sector = 0;                    // Restart from sector 0
+    }
+}
+
+EPwm7Regs.DBRED.all = risingEdgeDelay; // Apply rising edge delay to ePWM7 output
+
+
+
+void InitEPwm1Example()
+
+
+
+{
+    // Configure Time-Base Control Register: count-up mode
+    EPwm1Regs.TBCTL.bit.CTRMODE = 00; // Count up
+
+    // Set Timer Period for ePWM
+    EPwm1Regs.TBPRD = EPWM_TIMER_TBRPD; // Set timer period
+
+    // Set High-Speed Time-Base Clock Prescaler to 1 (no division)
+    EPwm1Regs.TBCTL.bit.HSPCLKDIV = 0; // TBCLK frequency to EPWMCLK frequency
+
+    // Set Time-Base Clock Prescaler to 1 (no division)
+    EPwm1Regs.TBCTL.bit.CLKDIV = 0;
+
+    // Configure Compare A shadow mode
+    EPwm1Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW; // Enable shadow register for CMPA
+
+    // Configure Compare B shadow mode
+    EPwm1Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW; // Enable shadow register for CMPB
+
+    // Load Compare A value on counter zero
+    EPwm1Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO; // Load CMPA at CTR = 0
+
+    // Load Compare B value on counter zero
+    EPwm1Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO; // Load CMPB at CTR = 0
+
+    // Set Compare A value (duty cycle)
+    EPwm1Regs.CMPA.bit.CMPA = duty_cycle1; // Set compare A value
+
+
+
+
+    // Compare B is not used, so no value set
+    // Set Action-Qualifier: set output high on zero
+    EPwm1Regs.AQCTLA.bit.ZRO = AQ_SET; // Set PWM1A pin on Zero
+
+    // Set Action-Qualifier: clear output on Compare A up event
+    EPwm1Regs.AQCTLA.bit.CAU = AQ_CLEAR; // Clear PWM1A pin on event A, up count
+
+    // Disable half-cycle deadband
+    EPwm1Regs.DBCTL.bit.HALFCYCLE = 0; // No half-cycle mode
+
+    // Disable deadband edge mode
+    EPwm1Regs.DBCTL.bit.DEDB_MODE = 0; // No deadband
+
+    // Set input mode for deadband (not used)
+    EPwm1Regs.DBCTL.bit.IN_MODE= 00; // Deadband input mode
+
+    // Set polarity select for deadband (active high)
+    EPwm1Regs.DBCTL.bit.POLSEL = 00; // Polarity select
+
+    // Set deadband output mode (enabled)
+    EPwm1Regs.DBCTL.bit.OUT_MODE = 10; // Deadband output mode
+
+    // Do not swap outputs
+    EPwm1Regs.DBCTL.bit.OUTSWAP = 00; // Output swap disabled
+}
+
+
+void InitEPwm2Example()
+{
+    // Configure Time-Base Control Register: count-up mode
+    EPwm2Regs.TBCTL.bit.CTRMODE = 00; // Count up
+
+
+
+
+    // Set Timer Period for ePWM2
+    EPwm2Regs.TBPRD = EPWM_TIMER_TBRPD; // Set timer period
+
+    // Set High-Speed Time-Base Clock Prescaler to 1 (no division)
+    EPwm2Regs.TBCTL.bit.HSPCLKDIV = 0; // TBCLK frequency to EPWMCLK frequency
+
+    // Set Time-Base Clock Prescaler to 1 (no division)
+    EPwm2Regs.TBCTL.bit.CLKDIV = 0;
+
+    // Configure Compare A shadow mode
+    EPwm2Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW; // Enable shadow register for CMPA
+
+    // Configure Compare B shadow mode
+    EPwm2Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW; // Enable shadow register for CMPB
+
+    // Load Compare A value on counter zero
+    EPwm2Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO; // Load CMPA at CTR = 0
+
+    // Load Compare B value on counter zero
+    EPwm2Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO; // Load CMPB at CTR = 0
+
+    // Set Compare A value (duty cycle)
+    EPwm2Regs.CMPA.bit.CMPA = duty_cycle1; // Set compare A value
+
+    // Compare B is not used
+    // Set Action-Qualifier: set output high on zero
+    EPwm2Regs.AQCTLA.bit.ZRO = AQ_SET; // Set PWM2A pin on Zero
+
+
+
+
+    // Set Action-Qualifier: clear output on Compare A up event
+    EPwm2Regs.AQCTLA.bit.CAU = AQ_CLEAR; // Clear PWM2A pin on event A, up count
+
+    // Disable half-cycle deadband
+    EPwm2Regs.DBCTL.bit.HALFCYCLE = 0; // No half-cycle mode
+
+    // Disable deadband edge mode
+    EPwm2Regs.DBCTL.bit.DEDB_MODE = 0; // No deadband
+
+    // Set input mode for deadband (not used)
+    EPwm2Regs.DBCTL.bit.IN_MODE= 00; // Deadband input mode
+
+    // Set polarity select for deadband (active high)
+    EPwm2Regs.DBCTL.bit.POLSEL = 00; // Polarity select
+
+    // Set deadband output mode (enabled)
+    EPwm2Regs.DBCTL.bit.OUT_MODE = 10; // Deadband output mode
+
+    // Do not swap outputs
+    EPwm2Regs.DBCTL.bit.OUTSWAP = 00; // Output swap disabled
+}
+
+
+void InitEPwm7Example()
+{
+    // Configure Time-Base Control Register: count-up mode
+    EPwm7Regs.TBCTL.bit.CTRMODE = 00; // Count up
+
+    // Set Timer Period for ePWM7
+    EPwm7Regs.TBPRD = EPWM_TIMER_TBRPD; // Set timer period
+
+    // Set High-Speed Time-Base Clock Prescaler to 1 (no division)
+
+
+
+    EPwm7Regs.TBCTL.bit.HSPCLKDIV = 0; // TBCLK frequency to EPWMCLK frequency
+
+    // Set Time-Base Clock Prescaler to 1 (no division)
+    EPwm7Regs.TBCTL.bit.CLKDIV = 0;
+
+    // Configure Compare A shadow mode
+    EPwm7Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW; // Enable shadow register for CMPA
+
+    // Configure Compare B shadow mode
+    EPwm7Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW; // Enable shadow register for CMPB
+
+    // Load Compare A value on counter zero
+    EPwm7Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO; // Load CMPA at CTR = 0
+
+    // Load Compare B value on counter zero
+    EPwm7Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO; // Load CMPB at CTR = 0
+
+    // Set Compare B value (duty cycle)
+    EPwm7Regs.CMPB.bit.CMPB = duty_cycle1; // Set compare B value
+
+    // Compare A is not used
+    // Set Action-Qualifier for output B: set high on zero
+    EPwm7Regs.AQCTLB.bit.ZRO = AQ_SET; // Set PWM7B pin on Zero
+
+    // Set Action-Qualifier for output B: clear on Compare B up event
+    EPwm7Regs.AQCTLB.bit.CBU = AQ_CLEAR; // Clear PWM7B pin on event B, up count
+
+
+
+
+    // Disable half-cycle deadband
+    EPwm7Regs.DBCTL.bit.HALFCYCLE = 0; // No half-cycle mode
+
+    // Disable deadband edge mode
+    EPwm7Regs.DBCTL.bit.DEDB_MODE = 0; // No deadband
+
+    // Set input mode for deadband (not used)
+    EPwm7Regs.DBCTL.bit.IN_MODE = 00; // Deadband input mode
+
+    // Set polarity select for deadband (active high)
+    EPwm7Regs.DBCTL.bit.POLSEL = 00; // Polarity select
+
+    // Set deadband output mode (enabled)
+    EPwm7Regs.DBCTL.bit.OUT_MODE = 10; // Deadband output mode
+
+    // Do not swap outputs
+    EPwm7Regs.DBCTL.bit.OUTSWAP = 00; // Output swap disabled
+}
